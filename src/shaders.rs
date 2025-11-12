@@ -64,6 +64,127 @@ pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
   }
 }
 
+/// Vertex Shader Especial para el Sol con Distorsión y Flare
+/// Aplica desplazamiento procedural en el vertex shader para simular:
+/// - Prominencias solares
+/// - Distorsiones de plasma
+/// - Efectos de flare visual
+pub fn vertex_shader_sun(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
+  let time = uniforms.time;
+  
+  // Posición original del vértice
+  let original_pos = vertex.position;
+  
+  // ======================================
+  // DISTORSIÓN PROCEDURAL EN EL VERTEX SHADER
+  // ======================================
+  
+  // Calcular distorsión basada en la posición y el tiempo
+  let distortion_freq = 4.0;
+  let distortion_amplitude = 0.08; // 8% del radio
+  
+  // Múltiples ondas de distorsión para simular actividad solar
+  let wave1 = (original_pos.x * distortion_freq + time * 1.2).sin();
+  let wave2 = (original_pos.y * distortion_freq + time * 1.5).cos();
+  let wave3 = (original_pos.z * distortion_freq + time * 1.0).sin();
+  
+  // Combinar ondas
+  let distortion = (wave1 + wave2 + wave3) / 3.0 * distortion_amplitude;
+  
+  // Normalizar la posición para obtener la dirección
+  let length = (original_pos.x * original_pos.x + 
+               original_pos.y * original_pos.y + 
+               original_pos.z * original_pos.z).sqrt().max(0.0001);
+  let normal_dir = Vector3::new(
+      original_pos.x / length,
+      original_pos.y / length,
+      original_pos.z / length
+  );
+  
+  // Aplicar distorsión a lo largo de la normal (prominencias solares)
+  let displaced_position = Vector3::new(
+      original_pos.x + normal_dir.x * distortion,
+      original_pos.y + normal_dir.y * distortion,
+      original_pos.z + normal_dir.z * distortion,
+  );
+  
+  // ======================================
+  // FLARE VISUAL: Prominencias Extremas
+  // Crear prominencias solares ocasionales más dramáticas
+  // ======================================
+  
+  // Convertir a coordenadas esféricas simplificadas
+  let theta = original_pos.y.atan2((original_pos.x * original_pos.x + original_pos.z * original_pos.z).sqrt());
+  let phi = original_pos.z.atan2(original_pos.x);
+  
+  // Patrones de prominencias
+  let prominence_pattern = ((theta * 8.0 + time * 0.8).sin() * (phi * 6.0 + time * 0.6).cos()).abs();
+  let prominence_intensity = if prominence_pattern > 0.85 {
+      (prominence_pattern - 0.85) * 3.0 // Prominencias extremas
+  } else {
+      0.0
+  };
+  
+  // Posición final con prominencias
+  let final_position = Vector3::new(
+      displaced_position.x + normal_dir.x * prominence_intensity * 0.15,
+      displaced_position.y + normal_dir.y * prominence_intensity * 0.15,
+      displaced_position.z + normal_dir.z * prominence_intensity * 0.15,
+  );
+  
+  // ======================================
+  // TRANSFORMACIONES ESTÁNDAR
+  // ======================================
+  
+  // Convertir a homogeneous coordinates
+  let position_vec4 = Vector4::new(
+    final_position.x,
+    final_position.y,
+    final_position.z,
+    1.0
+  );
+
+  // Apply Model transformation
+  let world_position = multiply_matrix_vector4(&uniforms.model_matrix, &position_vec4);
+
+  // Apply View transformation (camera)
+  let view_position = multiply_matrix_vector4(&uniforms.view_matrix, &world_position);
+
+  // Apply Projection transformation (perspective)
+  let clip_position = multiply_matrix_vector4(&uniforms.projection_matrix, &view_position);
+
+  // Perform perspective division to get NDC (Normalized Device Coordinates)
+  let ndc = if clip_position.w != 0.0 {
+      Vector3::new(
+          clip_position.x / clip_position.w,
+          clip_position.y / clip_position.w,
+          clip_position.z / clip_position.w,
+      )
+  } else {
+      Vector3::new(clip_position.x, clip_position.y, clip_position.z)
+  };
+
+  // Apply Viewport transformation to get screen coordinates
+  let ndc_vec4 = Vector4::new(ndc.x, ndc.y, ndc.z, 1.0);
+  let screen_position = multiply_matrix_vector4(&uniforms.viewport_matrix, &ndc_vec4);
+
+  let transformed_position = Vector3::new(
+      screen_position.x,
+      screen_position.y,
+      screen_position.z,
+  );
+
+  // Create a new Vertex with the transformed position
+  Vertex {
+    position: vertex.position, // Mantener posición original para cálculos en fragment shader
+    normal: vertex.normal,
+    tex_coords: vertex.tex_coords,
+    color: vertex.color,
+    transformed_position,
+    transformed_normal: vertex.normal,
+  }
+}
+
 // === Animated Fragment Shader Examples ===
 
 /// Example 1: Random flickering colors per fragment
@@ -630,6 +751,210 @@ pub fn shader_moon(fragment: &Fragment, time: f32) -> Vector3 {
     )
 }
 
+/// SOL: Shader Avanzado con Múltiples Capas de Ruido
+/// Este shader simula un sol con:
+/// - CAPA 1: Ruido Perlin simulado con múltiples octavas (turbulencias solares)
+/// - CAPA 2: Ruido Cellular simulado (manchas solares y regiones activas)
+/// - CAPA 3: Ruido Simplex simulado (flujos de plasma)
+/// - CAPA 4: Emisión variable con picos de energía
+/// - CAPA 5: Gradiente de temperatura (color dinámico)
+/// - CAPA 6: Corona solar con resplandor
+/// - CAPA 7: Llamaradas solares procedurales
+pub fn shader_sun(fragment: &Fragment, time: f32) -> Vector3 {
+    let world_pos = fragment.world_position;
+    let (r, theta, phi) = spherical_coords(world_pos);
+    
+    // ======================================
+    // CAPA 1: RUIDO PERLIN SIMULADO (Turbulencias Solares)
+    // Usando múltiples octavas para simular Perlin noise
+    // ======================================
+    let perlin_octave1 = fractal_noise(world_pos, time * 0.3, 6);
+    let perlin_octave2 = fractal_noise(
+        Vector3::new(world_pos.x * 2.3, world_pos.y * 2.3, world_pos.z * 2.3),
+        time * 0.25,
+        4
+    );
+    let perlin_octave3 = fractal_noise(
+        Vector3::new(world_pos.x * 4.7, world_pos.y * 4.7, world_pos.z * 4.7),
+        time * 0.4,
+        3
+    );
+    // Combinar octavas con diferentes pesos (simulando Perlin noise real)
+    let perlin_turbulence = perlin_octave1 * 0.5 + perlin_octave2 * 0.3 + perlin_octave3 * 0.2;
+    
+    // ======================================
+    // CAPA 2: RUIDO CELLULAR SIMULADO (Manchas Solares)
+    // Simulando el patrón de Voronoi/Cellular noise
+    // ======================================
+    let cell_scale = 8.0;
+    let cell_x = (world_pos.x * cell_scale + time * 0.1).floor();
+    let cell_y = (world_pos.y * cell_scale + time * 0.08).floor();
+    let cell_z = (world_pos.z * cell_scale + time * 0.12).floor();
+    
+    // Generar "puntos de celda" procedurales
+    let cell_seed = cell_x * 127.1 + cell_y * 311.7 + cell_z * 74.7;
+    let cell_random = (cell_seed.sin() * 43758.5453).fract();
+    
+    // Distancia al centro de la celda (simula manchas solares)
+    let cell_dist = ((world_pos.x * cell_scale - cell_x).abs() + 
+                     (world_pos.y * cell_scale - cell_y).abs() + 
+                     (world_pos.z * cell_scale - cell_z).abs()) * 0.5;
+    let cellular_pattern = (1.0 - cell_dist.min(1.0)) * cell_random;
+    
+    // Manchas solares (regiones más oscuras y frías)
+    let sunspot_threshold = 0.7;
+    let is_sunspot = if cellular_pattern > sunspot_threshold { 
+        0.4 + cellular_pattern * 0.3 
+    } else { 
+        1.0 
+    };
+    
+    // ======================================
+    // CAPA 3: RUIDO SIMPLEX SIMULADO (Flujos de Plasma)
+    // Simulando el patrón de flujo de Simplex noise
+    // ======================================
+    let simplex_freq1 = 3.5;
+    let simplex_freq2 = 7.2;
+    let simplex_flow1 = ((world_pos.x * simplex_freq1 + time * 0.5).sin() * 
+                         (world_pos.y * simplex_freq1 - time * 0.4).cos() *
+                         (world_pos.z * simplex_freq1 + time * 0.6).sin()) * 0.5 + 0.5;
+    let simplex_flow2 = ((world_pos.x * simplex_freq2 - time * 0.7).cos() * 
+                         (world_pos.y * simplex_freq2 + time * 0.5).sin() *
+                         (world_pos.z * simplex_freq2 - time * 0.8).cos()) * 0.5 + 0.5;
+    let simplex_plasma = simplex_flow1 * 0.6 + simplex_flow2 * 0.4;
+    
+    // ======================================
+    // CAPA 4: EMISIÓN VARIABLE (Picos de Energía)
+    // Simula la variación en la emisión solar
+    // ======================================
+    // Pulsación base del sol
+    let base_pulse = (time * 1.5).sin() * 0.15 + 0.85; // Rango: 0.7 - 1.0
+    
+    // Picos de energía localizados (usando coordenadas esféricas)
+    let energy_spike1 = ((theta * 8.0 + time * 2.0).sin() * (phi * 6.0 + time * 1.5).cos()).abs();
+    let energy_spike2 = ((theta * 12.0 - time * 1.8).cos() * (phi * 10.0 - time * 2.2).sin()).abs();
+    let energy_spikes = (energy_spike1 + energy_spike2) * 0.5;
+    
+    // Crear regiones de alta energía (flares)
+    let high_energy_regions = if energy_spikes > 0.75 {
+        1.0 + (energy_spikes - 0.75) * 4.0 // Picos intensos
+    } else {
+        1.0
+    };
+    
+    // Combinar emisiones
+    let emission_intensity = base_pulse * high_energy_regions * (0.8 + perlin_turbulence * 0.4);
+    
+    // ======================================
+    // CAPA 5: GRADIENTE DE TEMPERATURA (Color Dinámico)
+    // Simula diferentes temperaturas en la superficie solar
+    // ======================================
+    // Temperatura base calculada desde el centro hacia el borde
+    let distance_from_center = (world_pos.x * world_pos.x + 
+                                world_pos.y * world_pos.y + 
+                                world_pos.z * world_pos.z).sqrt();
+    let radial_gradient = 1.0 - (distance_from_center / r).min(1.0);
+    
+    // Temperatura variando con el ruido y el tiempo
+    let temperature = radial_gradient * 0.4 + 
+                     perlin_turbulence * 0.3 + 
+                     simplex_plasma * 0.2 + 
+                     cellular_pattern * 0.1;
+    
+    // Definir colores basados en temperatura (negro de cuerpo)
+    // Temperaturas más altas = más blanco/azul
+    // Temperaturas medias = amarillo/naranja
+    // Temperaturas bajas = rojo/naranja oscuro
+    let temp_hot = Vector3::new(1.0, 0.95, 0.8);      // Blanco-amarillo (centro, muy caliente)
+    let temp_medium = Vector3::new(1.0, 0.7, 0.2);    // Amarillo-naranja (medio)
+    let temp_warm = Vector3::new(1.0, 0.5, 0.1);      // Naranja (caliente)
+    let temp_cool = Vector3::new(0.9, 0.3, 0.05);     // Rojo-naranja (relativamente frío)
+    let temp_sunspot = Vector3::new(0.4, 0.15, 0.05); // Rojo oscuro (manchas solares)
+    
+    // Gradiente de temperatura con transiciones suaves
+    let base_color = if temperature > 0.8 {
+        // Región muy caliente (centro)
+        let t = (temperature - 0.8) / 0.2;
+        Vector3::new(
+            temp_medium.x + (temp_hot.x - temp_medium.x) * t,
+            temp_medium.y + (temp_hot.y - temp_medium.y) * t,
+            temp_medium.z + (temp_hot.z - temp_medium.z) * t,
+        )
+    } else if temperature > 0.6 {
+        // Región caliente
+        let t = (temperature - 0.6) / 0.2;
+        Vector3::new(
+            temp_warm.x + (temp_medium.x - temp_warm.x) * t,
+            temp_warm.y + (temp_medium.y - temp_warm.y) * t,
+            temp_warm.z + (temp_medium.z - temp_warm.z) * t,
+        )
+    } else if temperature > 0.4 {
+        // Región media
+        let t = (temperature - 0.4) / 0.2;
+        Vector3::new(
+            temp_cool.x + (temp_warm.x - temp_cool.x) * t,
+            temp_cool.y + (temp_warm.y - temp_cool.y) * t,
+            temp_cool.z + (temp_warm.z - temp_cool.z) * t,
+        )
+    } else {
+        // Región más fría
+        let t = temperature / 0.4;
+        Vector3::new(
+            temp_sunspot.x + (temp_cool.x - temp_sunspot.x) * t,
+            temp_sunspot.y + (temp_cool.y - temp_sunspot.y) * t,
+            temp_sunspot.z + (temp_sunspot.z - temp_sunspot.z) * t,
+        )
+    };
+    
+    // ======================================
+    // CAPA 6: CORONA SOLAR (Resplandor en los Bordes)
+    // Simula la corona solar visible en los bordes
+    // ======================================
+    let normal = Vector3::new(world_pos.x / r, world_pos.y / r, world_pos.z / r);
+    // Simular vista desde la cámara (aproximación)
+    let view_dir = Vector3::new(0.0, 0.0, 1.0); // Vista simplificada
+    let view_dot = (normal.x * view_dir.x + normal.y * view_dir.y + normal.z * view_dir.z).abs();
+    
+    // Efecto limbo (más brillante en los bordes)
+    let limb_darkening = view_dot.powf(0.4); // Exponente < 1 para efecto inverso en bordes
+    let corona_brightness = (1.0 - limb_darkening) * 0.5 + 0.5;
+    
+    // Corona animada
+    let corona_variation = (time * 0.8 + theta * 4.0).sin() * 0.2 + 0.8;
+    let corona_effect = corona_brightness * corona_variation * 1.3;
+    
+    // ======================================
+    // CAPA 7: LLAMARADAS SOLARES (Flares Procedurales)
+    // Simula erupciones solares dramáticas
+    // ======================================
+    let flare_pattern = ((theta * 15.0 + time * 3.0).sin() * 
+                         (phi * 12.0 - time * 2.5).cos()).abs();
+    let flare_intensity = if flare_pattern > 0.85 {
+        let flare_strength = (flare_pattern - 0.85) / 0.15;
+        let flare_pulse = (time * 5.0).sin() * 0.5 + 0.5;
+        1.0 + flare_strength * flare_pulse * 2.0 // Puede aumentar hasta 3x
+    } else {
+        1.0
+    };
+    
+    // ======================================
+    // COMBINACIÓN FINAL DE TODAS LAS CAPAS
+    // ======================================
+    let combined_color = Vector3::new(
+        base_color.x * emission_intensity * is_sunspot * corona_effect * flare_intensity,
+        base_color.y * emission_intensity * is_sunspot * corona_effect * flare_intensity,
+        base_color.z * emission_intensity * is_sunspot * corona_effect * flare_intensity,
+    );
+    
+    // Intensidad mínima para que el sol siempre sea visible y brillante
+    let min_intensity = 0.5;
+    Vector3::new(
+        (combined_color.x.max(min_intensity) * 1.5).min(3.0), // Permitir valores > 1.0 para efecto HDR
+        (combined_color.y.max(min_intensity * 0.5) * 1.5).min(3.0),
+        (combined_color.z.max(min_intensity * 0.2) * 1.5).min(3.0),
+    )
+}
+
 /// Fragment shader with planet type selection
 pub fn fragment_shader_planet(fragment: &Fragment, uniforms: &Uniforms, planet_type: PlanetType) -> Vector3 {
     let time = uniforms.time;
@@ -642,6 +967,7 @@ pub fn fragment_shader_planet(fragment: &Fragment, uniforms: &Uniforms, planet_t
         PlanetType::Volcanic => shader_volcanic_planet(fragment, time),
         PlanetType::Ring => shader_rings(fragment, time),
         PlanetType::Moon => shader_moon(fragment, time),
+        PlanetType::Sun => shader_sun(fragment, time),
     }
 }
 
@@ -805,4 +1131,5 @@ pub enum PlanetType {
     Volcanic,   // Planeta volcánico (adicional)
     Ring,       // Para anillos (usa shader especial)
     Moon,       // Para luna (usa shader especial)
+    Sun,        // Para el sol (shader especial avanzado)
 }

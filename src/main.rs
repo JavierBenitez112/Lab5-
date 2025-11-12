@@ -17,7 +17,7 @@ use crate::light::Light;
 use framebuffer::Framebuffer;
 use vertex::Vertex;
 use triangle::triangle;
-use shaders::{vertex_shader, fragment_shader_planet, PlanetType};
+use shaders::{vertex_shader, vertex_shader_sun, fragment_shader_planet, PlanetType};
 use obj::Obj;
 use raylib::prelude::*;
 use std::thread;
@@ -88,6 +88,46 @@ fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Ve
     }
 }
 
+/// Función especializada para renderizar el sol con vertex shader especial
+fn render_sun(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex], light: &Light) {
+    // Vertex Shader Stage - Usa el vertex shader especial del sol
+    let mut transformed_vertices = Vec::with_capacity(vertex_array.len());
+    for vertex in vertex_array {
+        let transformed = vertex_shader_sun(vertex, uniforms);
+        transformed_vertices.push(transformed);
+    }
+
+    // Primitive Assembly Stage
+    let mut triangles = Vec::new();
+    for i in (0..transformed_vertices.len()).step_by(3) {
+        if i + 2 < transformed_vertices.len() {
+            triangles.push([
+                transformed_vertices[i].clone(),
+                transformed_vertices[i + 1].clone(),
+                transformed_vertices[i + 2].clone(),
+            ]);
+        }
+    }
+
+    // Rasterization Stage
+    let mut fragments = Vec::new();
+    for tri in &triangles {
+        fragments.extend(triangle(&tri[0], &tri[1], &tri[2], light));
+    }
+
+    // Fragment Processing Stage - Usa el shader del sol
+    for fragment in fragments {
+        let final_color = fragment_shader_planet(&fragment, uniforms, PlanetType::Sun);
+
+        framebuffer.point(
+            fragment.position.x as i32,
+            fragment.position.y as i32,
+            final_color,
+            fragment.depth
+        );
+    }
+}
+
 fn main() {
     let window_width = 800;
     let window_height = 600;
@@ -99,7 +139,7 @@ fn main() {
         .build();
 
     let mut framebuffer = Framebuffer::new(window_width as u32, window_height as u32);
-    framebuffer.set_background_color(Vector3::new(0.2, 0.2, 0.4)); // Dark blue-ish
+    framebuffer.set_background_color(Vector3::new(0.02, 0.02, 0.05)); // Espacio profundo casi negro
 
     // Initialize the texture inside the framebuffer
     framebuffer.init_texture(&mut window, &thread);
@@ -175,6 +215,11 @@ fn main() {
     let moon = Obj::generate_sphere(0.3, 16);
     let moon_vertex_array = moon.get_vertex_array();
 
+    // Generar el SOL (esfera en el centro del sistema solar)
+    // Usar más segmentos para un sol más suave y detallado
+    let sun = Obj::generate_sphere(2.0, 64); // Radio 2.0, 64 segmentos para máxima calidad
+    let sun_vertex_array = sun.get_vertex_array();
+
     let mut elapsed_time = 0.0f32;
 
     while !window.window_should_close() {
@@ -198,6 +243,24 @@ fn main() {
         let view_matrix = camera.get_view_matrix();
         let projection_matrix = create_projection_matrix(fov_y, aspect, near, far);
         let viewport_matrix = create_viewport_matrix(0.0, 0.0, window_width as f32, window_height as f32);
+
+        // ======================================
+        // RENDERIZAR EL SOL EN EL CENTRO
+        // ======================================
+        let sun_translation = Vector3::new(0.0, 0.0, 0.0); // Centro del sistema
+        let sun_rotation = Vector3::new(0.0, elapsed_time * 0.1, 0.0); // Rotación lenta del sol
+        let sun_model_matrix = create_model_matrix(sun_translation, 1.0, sun_rotation);
+        
+        let sun_uniforms = Uniforms {
+            model_matrix: sun_model_matrix,
+            view_matrix,
+            projection_matrix,
+            viewport_matrix,
+            time: elapsed_time,
+        };
+
+        // Usar la función especializada render_sun
+        render_sun(&mut framebuffer, &sun_uniforms, &sun_vertex_array, &light);
 
         // Renderizar cada planeta en su órbita
         for (idx, planet) in planets.iter().enumerate() {
