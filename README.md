@@ -1,13 +1,15 @@
-<img width="783" height="632" alt="image" src="https://github.com/user-attachments/assets/d6c974ab-3809-436f-a189-74554fa71021" />
-<img width="784" height="613" alt="image" src="https://github.com/user-attachments/assets/865d5a87-6787-470f-92ac-b2ad79e416aa" />
-<img width="781" height="594" alt="image" src="https://github.com/user-attachments/assets/77eaf42b-0520-4a44-bc11-8c5f1ed37820" />
+<img width="724" height="478" alt="image" src="https://github.com/user-attachments/assets/e66948e9-5652-4869-8586-dba33663aedd" />
+<img width="761" height="569" alt="image" src="https://github.com/user-attachments/assets/67fb8c6b-2e12-4bb5-b31d-0c459612e323" />
+<img width="795" height="616" alt="image" src="https://github.com/user-attachments/assets/a60d42ce-13f7-470e-a4fb-569186a7d23d" />
+
+
 
 
 # Sistema Solar con Shaders Procedurales y Sol Animado
 
 Proyecto de gráficos por computadora que implementa un sistema solar completo usando únicamente shaders procedurales (sin texturas ni materiales externos). Todos los efectos visuales se generan mediante cálculos matemáticos en los fragment shaders y vertex shaders.
 
-## 🌟 Estrella Principal: SOL ANIMADO
+## Estrella Principal: SOL ANIMADO
 
 ### Características del Sol
 - **100% Procedural** - Generado completamente con shaders, sin texturas
@@ -300,7 +302,7 @@ Cada planeta tiene un fragment shader con **4 capas de cálculo**:
 **Uniforms utilizados**:
 - `time`: Para variaciones sutiles
 
-##### Sol (`shader_sun`) - **⭐ ESTRELLA PRINCIPAL**
+##### Sol (`shader_sun`) - ** ESTRELLA PRINCIPAL**
 - **CAPA 1**: Ruido Perlin simulado con 3 octavas (turbulencias solares)
 - **CAPA 2**: Ruido Cellular simulado (manchas solares)
 - **CAPA 3**: Ruido Simplex simulado (flujos de plasma)
@@ -452,12 +454,12 @@ cargo run
 
 ### Restricciones Técnicas Cumplidas
 
-✅ **Solo una esfera como base** - El sol es una esfera de 64 segmentos
-✅ **Sin texturas ni materiales** - 100% procedural con shaders
-✅ **Animación con uniform time** - Todas las capas usan tiempo
-✅ **Funciones de ruido en shader** - 3 tipos implementados
-✅ **Solo modificado con shaders** - Vertex y fragment shaders especializados
-✅ **Animación continua y cíclica** - Sin interrupciones, loops perfectos
+ **Solo una esfera como base** - El sol es una esfera de 64 segmentos
+ **Sin texturas ni materiales** - 100% procedural con shaders
+ **Animación con uniform time** - Todas las capas usan tiempo
+ **Funciones de ruido en shader** - 3 tipos implementados
+ **Solo modificado con shaders** - Vertex y fragment shaders especializados
+ **Animación continua y cíclica** - Sin interrupciones, loops perfectos
 
 ## Notas Técnicas
 
